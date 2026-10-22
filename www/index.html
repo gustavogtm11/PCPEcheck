@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PC-PE Agente - Offline SQLite</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>body{font-family:'Inter',sans-serif}</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div id="root" class="pb-20">
+  <header class="sticky top-0 z-20 bg-slate-900 text-white p-4 shadow-lg">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
+      <div>
+        <h1 class="font-bold text-lg">PC-PE 2026 • AGENTE</h1>
+        <p class="text-xs text-slate-300">SQLite offline • Tablet Edition • <span id="db-status">Carregando DB...</span></p>
+      </div>
+      <div class="text-right">
+        <div id="progress-text" class="font-bold text-xl">0/141</div>
+        <div class="w-24 h-2 bg-slate-700 rounded-full mt-1"><div id="progress-bar" class="h-2 bg-emerald-400 rounded-full transition-all" style="width:0%"></div></div>
+      </div>
+    </div>
+  </header>
+  <div class="max-w-4xl mx-auto p-4">
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm">
+      <b>📱 Como instalar como APK no tablet:</b> No Chrome, menu ⋮ > <b>Adicionar à tela inicial</b> ou <b>Instalar app</b>. Vai criar um ícone na sua gaveta, funciona 100% offline com SQLite salvo no aparelho.
+    </div>
+    <input id="search" placeholder="🔍 Buscar assunto (ex: crase, prisão, Excel)..." class="w-full p-3 rounded-xl border border-slate-200 shadow-sm mb-3">
+    <div class="flex gap-2 mb-4">
+      <button onclick="filter('all')" class="filter-btn bg-slate-900 text-white px-4 py-2 rounded-full text-sm">Todos</button>
+      <button onclick="filter('pending')" class="filter-btn bg-white border px-4 py-2 rounded-full text-sm">Pendentes</button>
+      <button onclick="filter('done')" class="filter-btn bg-white border px-4 py-2 rounded-full text-sm">Concluídos</button>
+      <button onclick="exportDB()" class="ml-auto bg-emerald-600 text-white px-4 py-2 rounded-full text-sm">💾 Backup</button>
+    </div>
+    <div id="materias"></div>
+  </div>
+</div>
+<script>
+const MATERIAS = [
+  {nome:"1. LEGISLAÇÃO ESTADUAL", assuntos:["Constituição do Estado de Pernambuco (artigos 101 a 105-B)","Lei nº 6.425/1972 (Estatuto do Policial Civil)","Lei nº 6.123/1968 (Estatuto do Servidor)","Lei Complementar nº 137/2008","Lei Complementar nº 317/2015"]},
+  {nome:"2. DIREITO CONSTITUCIONAL", assuntos:["Princípios fundamentais","Poderes constituintes originário, derivado e decorrente","Aplicabilidade das normas","Direitos e garantias fundamentais","Organização político-administrativa","Estado federal, União, estados, DF, municípios","Administração pública - servidores","Poder Executivo","Poder Legislativo","Poder Judiciário","Funções essenciais à justiça - MP, Advocacia, Defensoria","Defesa do Estado e instituições democráticas","Segurança pública na CE-PE"]},
+  {nome:"3. DIREITO ADMINISTRATIVO", assuntos:["Estado, governo e administração pública","Direito administrativo","Ato administrativo","Poderes: hierárquico, disciplinar, regulamentar e polícia","Uso e abuso do poder","Regime jurídico-administrativo","Princípios expressos e implícitos","Responsabilidade civil do Estado","Serviços públicos","Organização: centralização, descentralização, concentração e desconcentração","Administração direta e indireta","Controle da administração","Controle interno, judicial, legislativo","Improbidade administrativa","Processo administrativo","Licitações e contratos","Agente público","Disposições constitucionais","Cargo, emprego e função pública"]},
+  {nome:"4. DIREITO PENAL", assuntos:["Princípios básicos","Crime e contravenção","Aplicação da lei penal no tempo e espaço","Tempo e lugar do crime","Lei excepcional, especial e temporária","Territorialidade e extraterritorialidade","Contagem de prazo e irretroatividade","Crimes contra a pessoa","Crimes contra o patrimônio","Crimes contra a dignidade sexual","Crimes contra a administração pública","Crimes hediondos Lei 8.072/90","Preconceito raça/cor Lei 7.716/89","Abuso de autoridade Lei 13.869/19","Tortura Lei 9.455/97","ECA Lei 8.069/90","Org. criminosas Lei 12.850/13","Crimes de trânsito Lei 9.503/97","Maria da Penha Lei 11.340/06","Drogas Lei 11.343/06","Violência criança/adolescente Lei 14.344/22","Crimes ambientais Lei 9.605/98","Desarmamento Lei 10.826/03","Disposições constitucionais penais"]},
+  {nome:"5. DIREITO PROCESSUAL PENAL", assuntos:["Aplicação da lei processual","Inquérito policial","Provas: corpo de delito, perícias, interrogatório, testemunhas etc","Prisão e liberdade provisória","Medidas cautelares diversas","Prisão temporária Lei 7.960/89","Juizados especiais criminais Lei 9.099/95","Investigação criminal Lei 12.830/13","Disposições constitucionais processuais"]},
+  {nome:"6. LÍNGUA PORTUGUESA", assuntos:["Compreensão e interpretação de textos","Tipos e gêneros textuais","Ortografia oficial","Mecanismos de coesão textual","Elementos de referenciação e conectores","Tempos e modos verbais","Estrutura morfossintática","Classes de palavras","Coordenação","Subordinação","Pontuação","Concordância verbal e nominal","Regência","Crase","Colocação pronominal","Reescrita de frases","Significação das palavras","Substituição de trechos","Reorganização de orações","Reescrita gêneros e formalidade","Correspondência oficial - Manual Presidência","Redação oficial - aspectos gerais","Finalidade dos expedientes","Adequação linguagem e formato"]},
+  {nome:"7. INFORMÁTICA", assuntos:["Windows - janelas, menus, barra tarefas","Pastas e arquivos","Configurações básicas Windows","Windows Explorer","Word - área trabalho","Word - formatação","Word - listas, tabelas, estilos, cabeçalhos","Excel - células, fórmulas, ref absoluta/relativa","Funções Excel","Formatação, edição e gráficos Excel","PowerPoint completo","Redes, Internet, intranet, nuvem, deep web","Correio eletrônico","Navegadores e busca","Segurança, antivírus, criptografia","Backup e nuvem"]},
+  {nome:"8. RACIOCÍNIO LÓGICO", assuntos:["Conjuntos numéricos","Sistema legal de medidas","Razões, proporções, regra de três, porcentagem","Equações 1º e 2º grau","Sistemas lineares","Funções e gráficos","Princípios de contagem","PA e PG","Estruturas lógicas","Lógica argumentação","Lógica proposicional","Tabelas-verdade, equivalências, De Morgan, diagramas","Lógica primeira ordem","Contagem e probabilidade","Operações com conjuntos","Problemas aritméticos, geométricos e matriciais"]},
+  {nome:"9. CONTABILIDADE GERAL", assuntos:["Conceitos, objetivos e finalidades","Patrimônio, equação fundamental, situação líquida","Atos e fatos administrativos","Contas - débitos, créditos e saldos","Plano de contas","Escrituração, lançamentos, livros, competência e caixa","Operações: juros, descontos, tributos, aluguéis, folha etc","Balancete verificação","Balanço patrimonial","DRE","Normas Brasileiras de Contabilidade"]},
+  {nome:"10. ESTATÍSTICA", assuntos:["Descritiva: gráficos, tabelas, medidas posição/dispersão/assimetria/curtose","Probabilidade - axiomas, condicional e independência","Amostragem: simples, estratificada, sistemática, conglomerados","Tamanho amostral"]},
+  {nome:"11. ATUALIDADES (DISCURSIVA)", assuntos:["Tópicos relevantes e atuais em segurança pública"]}
+];
+
+let db, checked = {}, currentFilter='all';
+
+async function initDB(){
+  const SQL = await initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}` });
+  const saved = localStorage.getItem('pcpe_sqlite_db');
+  if(saved){
+    const buf = Uint8Array.from(atob(saved), c=>c.charCodeAt(0));
+    db = new SQL.Database(buf);
+  } else {
+    db = new SQL.Database();
+    db.run("CREATE TABLE IF NOT EXISTS progress (id TEXT PRIMARY KEY, checked INTEGER, updated_at TEXT);");
+  }
+  // Load
+  try{
+    const res = db.exec("SELECT id, checked FROM progress");
+    if(res[0]){
+      res[0].values.forEach(([id, chk])=>{ checked[id]=!!chk; });
+    }
+  }catch(e){ console.log('primeira vez', e) }
+  document.getElementById('db-status').textContent='SQLite OK • '+Object.keys(checked).length+' salvos';
+  render();
+}
+
+function saveDB(){
+  db.run("DELETE FROM progress");
+  const stmt = db.prepare("INSERT INTO progress (id, checked, updated_at) VALUES (?, ?, ?)");
+  Object.keys(checked).forEach(id=>{
+    stmt.run([id, checked[id]?1:0, new Date().toISOString()]);
+  });
+  stmt.free();
+  const data = db.export();
+  const b64 = btoa(String.fromCharCode(...data));
+  localStorage.setItem('pcpe_sqlite_db', b64);
+  document.getElementById('db-status').textContent='SQLite OK • salvo agora • '+Object.keys(checked).filter(k=>checked[k]).length+' concluídos';
+  updateProgress();
+}
+
+function updateProgress(){
+  const total = MATERIAS.reduce((a,m)=>a+m.assuntos.length,0);
+  const done = Object.values(checked).filter(Boolean).length;
+  document.getElementById('progress-text').textContent = `${done}/${total}`;
+  document.getElementById('progress-bar').style.width = (done/total*100)+'%';
+}
+
+function render(){
+  const q = (document.getElementById('search').value||'').toLowerCase();
+  const container = document.getElementById('materias');
+  container.innerHTML='';
+  MATERIAS.forEach((mat, mi)=>{
+    const filteredAssuntos = mat.assuntos.map((a, ai)=>{
+      const id = `m${mi}-a${ai}`;
+      return {text:a, id, checked: !!checked[id]};
+    }).filter(item=>{
+      if(q && !item.text.toLowerCase().includes(q) && !mat.nome.toLowerCase().includes(q)) return false;
+      if(currentFilter==='done' && !item.checked) return false;
+      if(currentFilter==='pending' && item.checked) return false;
+      return true;
+    });
+    if(filteredAssuntos.length===0 && q) return;
+    const doneCount = mat.assuntos.filter((_,ai)=> checked[`m${mi}-a${ai}`]).length;
+    const div = document.createElement('div');
+    div.className='bg-white rounded-2xl shadow-sm border border-slate-200 mb-3 overflow-hidden';
+    div.innerHTML=`
+      <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="w-full flex justify-between items-center p-4 text-left">
+        <span class="font-bold text-slate-800">${mat.nome}</span>
+        <span class="text-xs bg-slate-100 px-3 py-1 rounded-full">${doneCount}/${mat.assuntos.length}</span>
+      </button>
+      <div class="border-t p-2 space-y-1">
+        ${filteredAssuntos.map(item=>`
+          <label class="flex items-start gap-3 p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer ${item.checked?'bg-emerald-50':''}">
+            <input type="checkbox" ${item.checked?'checked':''} onchange="toggle('${item.id}')" class="mt-1 w-5 h-5 accent-emerald-600">
+            <span class="text-sm ${item.checked?'line-through text-slate-400':''}">${item.text}</span>
+          </label>
+        `).join('')}
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  updateProgress();
+}
+
+function toggle(id){
+  checked[id]=!checked[id];
+  if(!checked[id]) delete checked[id];
+  saveDB();
+  render();
+}
+
+function filter(type){
+  currentFilter=type;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn bg-white border px-4 py-2 rounded-full text-sm');
+  event.target.className='filter-btn bg-slate-900 text-white px-4 py-2 rounded-full text-sm';
+  render();
+}
+
+function exportDB(){
+  const dataStr = JSON.stringify({checked, exportAt:new Date().toISOString()}, null, 2);
+  const blob = new Blob([dataStr], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='pcpe-backup-'+Date.now()+'.json'; a.click();
+}
+
+document.getElementById('search').addEventListener('input', render);
+initDB();
+
+// PWA Service Worker
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
