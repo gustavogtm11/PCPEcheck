@@ -5,12 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PC-PE Agente - Offline SQLite</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f172a">
+<meta id="theme-color-meta" name="theme-color" content="#0f172a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<style>body{font-family:'Inter',sans-serif}</style>
+<style>
+body{font-family:'Inter',sans-serif;transition:background-color .2s,color .2s}
+body.dark-mode{background:#0b1120!important;color:#e2e8f0}
+.dark-mode .bg-white{background-color:#172033!important}
+.dark-mode .bg-slate-50{background-color:#0b1120!important}
+.dark-mode .bg-slate-100{background-color:#263247!important}
+.dark-mode .bg-blue-50{background-color:#172b45!important}
+.dark-mode .border-slate-200,.dark-mode .border-blue-200{border-color:#334155!important}
+.dark-mode .text-slate-800,.dark-mode .text-slate-700{color:#e2e8f0!important}
+.dark-mode .text-slate-600,.dark-mode .text-slate-500{color:#cbd5e1!important}
+.dark-mode .text-slate-400{color:#94a3b8!important}
+.dark-mode .hover\\:bg-slate-50:hover{background-color:#263247!important}
+.dark-mode input#search{background:#172033;color:#f1f5f9;border-color:#334155}
+.dark-mode .bg-emerald-50{background-color:#12352f!important}
+.dark-mode .bg-white.border{background-color:#172033!important;color:#e2e8f0;border-color:#475569}
+.dark-mode .bg-slate-900{background-color:#020617!important}
+.subject-progress{height:6px;background:#e2e8f0;border-radius:999px;overflow:hidden}
+.subject-progress-fill{height:100%;background:#10b981;border-radius:999px;transition:width .2s}
+.dark-mode .subject-progress{background:#334155}
+</style>
 </head>
 <body class="bg-slate-50 min-h-screen">
 <div id="root" class="pb-20">
@@ -20,10 +39,10 @@
         <h1 class="font-bold text-lg">PC-PE 2026 • AGENTE</h1>
         <p class="text-xs text-slate-300">SQLite offline • Tablet Edition • <span id="db-status">Carregando DB...</span></p>
       </div>
-      <div class="text-right">
+      <div class="flex items-center gap-3"><button id="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro e escuro" class="rounded-full border border-slate-600 px-3 py-2 text-sm hover:bg-slate-700">☀️ Claro</button><div class="text-right">
         <div id="progress-text" class="font-bold text-xl">0/141</div>
         <div class="w-24 h-2 bg-slate-700 rounded-full mt-1"><div id="progress-bar" class="h-2 bg-emerald-400 rounded-full transition-all" style="width:0%"></div></div>
-      </div>
+      </div></div>
     </div>
   </header>
   <div class="max-w-4xl mx-auto p-4">
@@ -56,6 +75,16 @@ const MATERIAS = [
 ];
 
 let db, checked = {}, currentFilter='all';
+let theme = localStorage.getItem('pcpe_theme') || 'light';
+
+function applyTheme(){
+  const dark = theme === 'dark';
+  document.body.classList.toggle('dark-mode', dark);
+  document.getElementById('theme-toggle').textContent = dark ? '🌙 Escuro' : '☀️ Claro';
+  document.getElementById('theme-color-meta').content = dark ? '#0b1120' : '#0f172a';
+  localStorage.setItem('pcpe_theme', theme);
+}
+function toggleTheme(){ theme = theme === 'dark' ? 'light' : 'dark'; applyTheme(); }
 
 async function initDB(){
   const SQL = await initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}` });
@@ -75,6 +104,7 @@ async function initDB(){
     }
   }catch(e){ console.log('primeira vez', e) }
   document.getElementById('db-status').textContent='SQLite OK • '+Object.keys(checked).length+' salvos';
+  applyTheme();
   render();
 }
 
@@ -115,14 +145,16 @@ function render(){
     });
     if(filteredAssuntos.length===0 && q) return;
     const doneCount = mat.assuntos.filter((_,ai)=> checked[`m${mi}-a${ai}`]).length;
+    const percent = mat.assuntos.length ? Math.round(doneCount / mat.assuntos.length * 100) : 0;
     const div = document.createElement('div');
     div.className='bg-white rounded-2xl shadow-sm border border-slate-200 mb-3 overflow-hidden';
     div.innerHTML=`
-      <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="w-full flex justify-between items-center p-4 text-left">
-        <span class="font-bold text-slate-800">${mat.nome}</span>
-        <span class="text-xs bg-slate-100 px-3 py-1 rounded-full">${doneCount}/${mat.assuntos.length}</span>
+      <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="w-full p-4 text-left">
+        <span class="flex justify-between items-center gap-3"><span class="font-bold text-slate-800">${mat.nome}</span><span class="text-xs bg-slate-100 px-3 py-1 rounded-full whitespace-nowrap">${doneCount}/${mat.assuntos.length}</span></span>
+        <span class="flex justify-between items-center text-xs text-slate-500 mt-3 mb-1"><span>Progresso da matéria</span><span class="font-semibold">${percent}%</span></span>
+        <span class="subject-progress block"><span class="subject-progress-fill block" style="width:${percent}%"></span></span>
       </button>
-      <div class="border-t p-2 space-y-1">
+      <div class="hidden border-t p-2 space-y-1">
         ${filteredAssuntos.map(item=>`
           <label class="flex items-start gap-3 p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer ${item.checked?'bg-emerald-50':''}">
             <input type="checkbox" ${item.checked?'checked':''} onchange="toggle('${item.id}')" class="mt-1 w-5 h-5 accent-emerald-600">
